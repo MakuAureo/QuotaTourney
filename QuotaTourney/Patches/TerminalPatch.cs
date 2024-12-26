@@ -59,6 +59,7 @@ namespace QuotaTourney.Patches
 
         public static void ForceItemSales(int force)
         {
+            force = (force == 0) ? 1 : force;
             Terminal terminal = Object.FindObjectOfType<Terminal>();
 
             List<int> itemIndex = new List<int>();

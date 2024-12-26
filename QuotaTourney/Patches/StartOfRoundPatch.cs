@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using UnityEngine;
+using static QuotaTournament.QuotaTournament;
 
 namespace QuotaTourney.Patches
 {
@@ -16,6 +17,9 @@ namespace QuotaTourney.Patches
                 {
                     RoundManager.Instance.DespawnPropsAtEndOfRound(true);
                     __instance.ResetShip();
+                    __instance.profitQuotaMonitorText.text = $"TOTAL SCORE:\n  ${GetScore().ToString()}";
+
+                    ResetScore();
 
                     if (QuotaTournament.QuotaTournament.GetMoonFrequencyValue() == "quota")
                         __instance.ChangeLevelServerRpc((__instance.overrideSeedNumber ^ 0b10110001101110001100010111) % 13,
@@ -65,9 +69,12 @@ namespace QuotaTourney.Patches
         }
 
         [HarmonyPatch("PassTimeToNextDay")]
-        [HarmonyPrefix]
-        static void PassTimeToNextDayPrePatch(ref StartOfRound __instance)
+        [HarmonyPostfix]
+        static void PassTimeToNextDayPostPatch(ref StartOfRound __instance)
         {
+            SetScore(__instance.GetValueOfAllScrap(true, false));
+            __instance.profitQuotaMonitorText.text = $"CURRENT SCORE:\n  ${GetScore().ToString()}";
+
             TerminalPatch.ForceItemSales(TimeOfDay.Instance.daysUntilDeadline);
         }
 

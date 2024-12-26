@@ -7,7 +7,8 @@ using LethalNetworkAPI;
 using Unity.Netcode;
 using BepInEx.Configuration;
 using System;
-using Object = UnityEngine.Object;    
+using Object = UnityEngine.Object;
+using UnityEngine.Rendering;
 
 namespace QuotaTournament
 {
@@ -18,7 +19,7 @@ namespace QuotaTournament
         private LNetworkMessage<T> server;
         private LNetworkMessage<T> client;
 
-        public ModNetworkBehavior(string networkName,Action<T, ulong> serverResponse, Action<T> clientResponse)
+        public ModNetworkBehavior(string networkName, Action<T, ulong> serverResponse, Action<T> clientResponse)
         {
             server = LNetworkMessage<T>.Create(networkName, serverResponse);
             client = LNetworkMessage<T>.Connect(networkName, null, clientResponse);
@@ -51,11 +52,13 @@ namespace QuotaTournament
     {
         private const string modGuid = "OreoM.QuotaTournament";
         private const string modName = "QuotaTournament";
-        private const string modVersion = "1.3.5";
+        private const string modVersion = "1.3.6";
 
         private readonly Harmony harmony = new Harmony(modGuid);
 
         internal ManualLogSource logger;
+
+        private static int score = 0;
 
         private static ConfigEntry<bool> allowShopBypassAnyDay;
 
@@ -103,6 +106,21 @@ namespace QuotaTournament
                 logger.LogInfo($"{modName} v{modVersion} failed to create Network");
                 Debug.LogException(e);
             }
+        }
+
+        public static void SetScore(int newScore)
+        {
+            score = newScore;
+        }
+
+        public static void ResetScore()
+        {
+            score = 0;
+        }
+
+        public static int GetScore()
+        {
+            return score;
         }
 
         public static void SetMoonFrequency(string config)
@@ -155,6 +173,9 @@ namespace QuotaTournament
 
             startOfRound.overrideRandomSeed = true;
             startOfRound.overrideSeedNumber = netSeed.GetValue();
+
+            ResetScore();
+            startOfRound.profitQuotaMonitorText.text = $"CURRENT SCORE:\n  ${GetScore().ToString()}";
 
             TerminalPatch.ForceItemSales(TimeOfDay.Instance.daysUntilDeadline);
         }
