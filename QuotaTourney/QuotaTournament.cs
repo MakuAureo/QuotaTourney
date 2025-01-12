@@ -8,10 +8,32 @@ using Unity.Netcode;
 using BepInEx.Configuration;
 using System;
 using Object = UnityEngine.Object;
-using UnityEngine.Rendering;
+using System.Collections.Generic;
+using System.Linq;
+using Random = System.Random;
+using static TerminalApi.TerminalApi;
+using TerminalApi.Classes;
+using TerminalApi;
 
 namespace QuotaTournament
 {
+    enum MoonIDs
+    {
+        Experimentation,
+        Assurance,
+        Vow,
+        Company,
+        March,
+        Adamance,
+        Rend,
+        Dine,
+        Offense,
+        Titan,
+        Artifice,
+        Liquidation,
+        Embrion
+    }
+
     public class ModNetworkBehavior<T>
     {
         private T Value;
@@ -48,69 +70,179 @@ namespace QuotaTournament
 
     [BepInPlugin(modGuid, modName, modVersion)]
     [BepInDependency("LethalNetworkAPI")]
+    [BepInDependency("atomic.terminalapi")]
     public class QuotaTournament : BaseUnityPlugin
     {
         private const string modGuid = "OreoM.QuotaTournament";
         private const string modName = "QuotaTournament";
-        private const string modVersion = "1.3.6";
+        private const string modVersion = "1.4.1";
 
         private readonly Harmony harmony = new Harmony(modGuid);
+        private static QuotaTournament Instance;
 
-        internal ManualLogSource logger;
+        internal ManualLogSource internalLogger;
 
         private static int score = 0;
+        private static List<int> allowedMoons = new List<int>();
+
+        public const int seedMax = 2147483647;
+        public static bool seedHasBeenSet = false;
+        public static string terminalInput = "";
 
         private static ConfigEntry<bool> allowShopBypassAnyDay;
+        private static ConfigEntry<bool> speedrunBonus;
+        private static ConfigEntry<int> wipeLossPercentage;
 
         private static ModNetworkBehavior<int> netSeed;
         private static ModNetworkBehavior<string> netBuy;
         private static ModNetworkBehavior<string> netMoonFrequency;
+        private static ModNetworkBehavior<string> netAllowedMoons;
+
+        private static class TerminalKeywords
+        {
+            public static TerminalKeyword seed;
+            public static TerminalKeyword freq;
+            public static TerminalKeyword ban;
+            public static TerminalKeyword blank;
+        }
+        private static class TerminalNodes
+        {
+            public static TerminalNode seed;
+            public static TerminalNode freq;
+            public static TerminalNode ban;
+        }
 
         void Awake()
         {
+            if (Instance == null)
+            {
+                Instance = this;
+            }
+
+            //Configs
             allowShopBypassAnyDay = Config.Bind(
                 "General",
                 "Allow shop bypass any day",
                 true,
                 new ConfigDescription(
                     "Allow items and cruiser to be bought directly to ship any day instead of only before first day"));
-            
-            logger = BepInEx.Logging.Logger.CreateLogSource(modGuid);
-            logger.LogInfo($"{modName} v{modVersion} is patching.");
+            speedrunBonus = Config.Bind(
+                "General",
+                "Speedrun Bonus",
+                false,
+                new ConfigDescription(
+                    "Get more score if ship leaves early"));
+            wipeLossPercentage = Config.Bind(
+                "General",
+                "Wipe loss percentage",
+                50,
+                new ConfigDescription(
+                    "What percentage of score is lost if all players die",
+                    new AcceptableValueRange<int>(0, 100)));
+
+            internalLogger = BepInEx.Logging.Logger.CreateLogSource(modGuid);
+            internalLogger.LogInfo($"{modName} v{modVersion} is patching.");
+            //Harmony Patches
             try
             { 
                 harmony.PatchAll(typeof(QuotaTournament));
+                harmony.PatchAll(typeof(GameNetworkManagerPatch));
                 harmony.PatchAll(typeof(StartOfRoundPatch));
                 harmony.PatchAll(typeof(TerminalPatch));
 
-                logger.LogInfo($"{modName} v{modVersion} is done patching.");
+                internalLogger.LogInfo($"{modName} v{modVersion} is done patching.");
             }
             catch (System.Exception e)
             {
-                logger.LogInfo($"{modName} v{modVersion} failed to patch.");
+                internalLogger.LogInfo($"{modName} v{modVersion} failed to patch.");
                 Debug.LogException(e);
             }
 
-            logger.LogInfo($"{modName} v{modVersion} is creating the Network");
+            internalLogger.LogInfo($"{modName} v{modVersion} is creating the Network");
+            //NetworkApi
             try
             {
                 netSeed = new ModNetworkBehavior<int>("netSeed", SetSeedClientRequest, SetSeedServerRequest);
                 netBuy = new ModNetworkBehavior<string>("netBuy", BuyFromShopClientRequest, BuyFromShopServerRequest);
                 netMoonFrequency = new ModNetworkBehavior<string>("netMoonFrequency", SetMoonFrequencyClientRequest, SetMoonFrequencyServerRequest);
                 netMoonFrequency.SetValue("day");
+                netAllowedMoons = new ModNetworkBehavior<string>("netAllowedMoons", BanMoonClientRequest, BanMoonServerRequest);
+                netMoonFrequency.SetValue("default");
 
-                logger.LogInfo($"{modName} v{modVersion} is done creating the Network");
+                ResetAllowedMoonList();
+
+                internalLogger.LogInfo($"{modName} v{modVersion} is done creating the Network");
             }
             catch (System.Exception e)
             {
-                logger.LogInfo($"{modName} v{modVersion} failed to create Network");
+                internalLogger.LogInfo($"{modName} v{modVersion} failed to create Network");
+                Debug.LogException(e);
+            }
+
+            internalLogger.LogInfo($"{modName} v{modVersion} is implementing terminal commands");
+            //Terminal Commands
+            try
+            {   
+                TerminalNodes.seed = CreateTerminalNode("seedNode", true);
+                TerminalNodes.freq = CreateTerminalNode("freqNode", true);
+                TerminalNodes.ban = CreateTerminalNode("banNode", true);
+
+                TerminalKeywords.blank = CreateTerminalKeyword("whyCanINotGetCustomInputWithoutThis???", true);
+                TerminalKeywords.seed = CreateTerminalKeyword("seed", false, TerminalNodes.seed);
+                TerminalKeywords.freq = CreateTerminalKeyword("freq", false, TerminalNodes.freq);
+                TerminalKeywords.ban = CreateTerminalKeyword("ban", false, TerminalNodes.ban);
+
+                TerminalKeywords.blank.AddCompatibleNoun(TerminalKeywords.seed, TerminalNodes.seed);
+                TerminalKeywords.blank.AddCompatibleNoun(TerminalKeywords.freq, TerminalNodes.freq);
+                TerminalKeywords.blank.AddCompatibleNoun(TerminalKeywords.ban, TerminalNodes.ban);
+
+                TerminalKeywords.seed.defaultVerb = TerminalKeywords.blank;
+                TerminalKeywords.freq.defaultVerb = TerminalKeywords.blank;
+                TerminalKeywords.ban.defaultVerb = TerminalKeywords.blank;
+
+                AddTerminalKeyword(TerminalKeywords.seed, new CommandInfo()
+                {
+                    Title = "Seed [num]",
+                    TriggerNode = TerminalNodes.seed,
+                    DisplayTextSupplier = SetSeed,
+                    Category = "Other",
+                    Description = "Type a seed to start the challenge"
+                });
+                AddTerminalKeyword(TerminalKeywords.freq, new CommandInfo()
+                {
+                    Title = "Freq [day/quota]",
+                    TriggerNode = TerminalNodes.freq,
+                    DisplayTextSupplier = SetMoonFrequency,
+                    Category = "Other",
+                    Description = "Change the frequency with which moon changes"
+                });
+                AddTerminalKeyword(TerminalKeywords.ban, new CommandInfo()
+                {
+                    Title = "Ban [moon]",
+                    TriggerNode = TerminalNodes.ban,
+                    DisplayTextSupplier = BanMoon,
+                    Category = "Other",
+                    Description = "Ban moon from being choosen"
+                });
+
+                internalLogger.LogInfo($"{modName} v{modVersion} is done implementing terminal commands");
+            }
+            catch (System.Exception e)
+            {
+                internalLogger.LogInfo($"{modName} v{modVersion} failed to implement terminal commands");
                 Debug.LogException(e);
             }
         }
 
-        public static void SetScore(int newScore)
+        public static void AddScore(int inputScore)
         {
-            score = newScore;
+            float multiplier = (speedrunBonus.Value) ? (2 - TimeOfDay.Instance.normalizedTimeOfDay) : (1);
+            score += (int)(inputScore*multiplier);
+        }
+
+        public static void LoseScoreToWipe()
+        {
+            score = (int)((float)score*(100-wipeLossPercentage.Value)/100f);
         }
 
         public static void ResetScore()
@@ -123,9 +255,18 @@ namespace QuotaTournament
             return score;
         }
 
-        public static void SetMoonFrequency(string config)
+        public static string SetMoonFrequency()
         {
+            if (TimeOfDay.Instance.daysUntilDeadline < 3 || !StartOfRound.Instance.inShipPhase)
+                return "Moon frequency can only be changed before starting the quota";
+
+            string[] inp = terminalInput.Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+            string config = inp[1];
+            if (config != "quota" && config != "day")
+                return $"{config} is an invalid option";
+
             netMoonFrequency.SendServer(config);
+            return $"Moon will change every {config}";
         }
 
         public static void SetMoonFrequencyClientRequest(string config, ulong clientID)
@@ -143,20 +284,24 @@ namespace QuotaTournament
             return netMoonFrequency.GetValue();
         }
 
-        public static void SetSeed(int seed)
+        public static string SetSeed()
         {
-            while ((seed ^ 0b10110001101110001100010111) % 13 == 11 ||
-                   (seed ^ 0b10110001101110001100010111) % 13 == 3)
-                seed = StartOfRoundPatch.NextSeed(seed);
+            if (TimeOfDay.Instance.daysUntilDeadline < 3 || !StartOfRound.Instance.inShipPhase)
+                return "Seed can only be set before starting the quota";
+
+            string[] inp = terminalInput.Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+            if (!int.TryParse(inp[1], out int seed))
+                return $"{seed} is not a valid number";
 
             netSeed.SendServer(seed);
+            return $"Seed {seed} is set";
         }
 
         public static void SetSeedClientRequest(int seed, ulong clientID)
         {
             StartOfRound.Instance.ChangeLevelServerRpc(
-                (seed ^ 0b10110001101110001100010111) % 13,
-                Object.FindObjectOfType<Terminal>().groupCredits = new System.Random(seed + 9114523).Next(900, 1500));
+                allowedMoons[seed % allowedMoons.Count],
+                Object.FindObjectOfType<Terminal>().groupCredits = new System.Random(seed + 9114523).Next(1000, 1600));
 
             netSeed.SendClients(seed);
         }
@@ -165,10 +310,11 @@ namespace QuotaTournament
         {
             Debug.Log($"Seed set: {seed}");
             netSeed.SetValue(seed);
+            seedHasBeenSet = true;
 
             StartOfRound startOfRound = StartOfRound.Instance;
 
-            startOfRound.randomMapSeed = (netSeed.GetValue() + 12814523) % 100000000;
+            startOfRound.randomMapSeed = new Random(netSeed.GetValue()).Next(1, seedMax);
             startOfRound.SetPlanetsWeather();
 
             startOfRound.overrideRandomSeed = true;
@@ -239,6 +385,53 @@ namespace QuotaTournament
                 terminal.orderedVehicleFromTerminal = -1;
                 terminal.vehicleInDropship = false;
             }
+        }
+
+        public static string BanMoon()
+        {
+            if (seedHasBeenSet)
+                return "Moons can only be banned before setting the seed";
+
+            string[] inp = terminalInput.Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+            string moon = inp[1];
+
+            string moonName = Enum.GetNames(typeof(MoonIDs)).FirstOrDefault(s => s.StartsWith(moon, StringComparison.OrdinalIgnoreCase));
+            if (moonName != null && allowedMoons.Contains((int)Enum.Parse(typeof(MoonIDs), moonName)))
+            {
+                netAllowedMoons.SendServer(moonName);
+                return $"{moonName} has been banned from the list";
+            }
+
+            return $"{moon} is an invalid option";
+        }
+
+        public static void BanMoonClientRequest(string moonName, ulong clientID)
+        {
+            netAllowedMoons.SendClients(moonName);
+        }
+
+        public static void BanMoonServerRequest(string moonName)
+        {
+            netAllowedMoons.SetValue("modified");
+            allowedMoons.Remove((int)Enum.Parse(typeof(MoonIDs), moonName));
+        }
+
+        public static void ResetAllowedMoonList()
+        {
+            allowedMoons.Clear();
+            foreach (int i in Enum.GetValues(typeof(MoonIDs)))
+            {
+                if (i == 3 || i == 11)
+                    continue;
+
+                allowedMoons.Add(i);
+            }
+            netAllowedMoons.SetValue("default");
+        }
+
+        public static List<int> GetAllowedMoonList()
+        {
+            return allowedMoons;
         }
     };
 }

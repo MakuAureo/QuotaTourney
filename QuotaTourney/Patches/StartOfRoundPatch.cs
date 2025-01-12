@@ -1,6 +1,8 @@
-﻿using HarmonyLib;
+﻿using System;
+using HarmonyLib;
 using UnityEngine;
 using static QuotaTournament.QuotaTournament;
+using Object = UnityEngine.Object;
 
 namespace QuotaTourney.Patches
 {
@@ -11,7 +13,7 @@ namespace QuotaTourney.Patches
         [HarmonyPostfix]
         static void SetShipReadyToLandPostPatch(ref StartOfRound __instance)
         {
-            if (__instance.overrideRandomSeed)
+            if (seedHasBeenSet)
             {
                 if (TimeOfDay.Instance.daysUntilDeadline == 0)
                 {
@@ -20,14 +22,15 @@ namespace QuotaTourney.Patches
                     __instance.profitQuotaMonitorText.text = $"TOTAL SCORE:\n  ${GetScore().ToString()}";
 
                     ResetScore();
+                    ResetAllowedMoonList();
 
                     if (QuotaTournament.QuotaTournament.GetMoonFrequencyValue() == "quota")
-                        __instance.ChangeLevelServerRpc((__instance.overrideSeedNumber ^ 0b10110001101110001100010111) % 13,
+                        __instance.ChangeLevelServerRpc(GetAllowedMoonList()[__instance.overrideSeedNumber % GetAllowedMoonList().Count],
                             Object.FindObjectOfType<Terminal>().groupCredits);
                 }
 
                 if (QuotaTournament.QuotaTournament.GetMoonFrequencyValue() == "day")
-                    __instance.ChangeLevelServerRpc((__instance.overrideSeedNumber ^ 0b10110001101110001100010111) % 13,
+                    __instance.ChangeLevelServerRpc(GetAllowedMoonList()[__instance.overrideSeedNumber % GetAllowedMoonList().Count],
                         Object.FindObjectOfType<Terminal>().groupCredits);
 
                 Debug.Log($"Next seed: {__instance.overrideSeedNumber}");
@@ -38,7 +41,7 @@ namespace QuotaTourney.Patches
         [HarmonyPrefix]
         static void StartGamePrePatch(ref StartOfRound __instance)
         {
-            if (TimeOfDay.Instance.daysUntilDeadline == 1 && __instance.overrideRandomSeed)
+            if (TimeOfDay.Instance.daysUntilDeadline == 1 && seedHasBeenSet)
             {
                 __instance.isChallengeFile = true;
             }
@@ -48,16 +51,12 @@ namespace QuotaTourney.Patches
         [HarmonyPostfix]
         static void ShipHasLeftPostPatch(ref StartOfRound __instance)
         {
-            if (__instance.overrideRandomSeed)
+            if (seedHasBeenSet)
             {
-                do
-                    __instance.overrideSeedNumber = NextSeed(__instance.overrideSeedNumber);
-                while ((__instance.overrideSeedNumber ^ 0b10110001101110001100010111) % 13 == 11 ||
-                       (__instance.overrideSeedNumber ^ 0b10110001101110001100010111) % 13 == 3);
-
+                __instance.overrideSeedNumber = NextSeed(__instance.overrideSeedNumber);
                 __instance.randomMapSeed = NextSeed(__instance.randomMapSeed);
+                __instance.isChallengeFile = false;
             }
-            __instance.isChallengeFile = false;
         }
 
         [HarmonyPatch("ChangeLevel")]
@@ -72,15 +71,21 @@ namespace QuotaTourney.Patches
         [HarmonyPostfix]
         static void PassTimeToNextDayPostPatch(ref StartOfRound __instance)
         {
-            SetScore(__instance.GetValueOfAllScrap(true, false));
-            __instance.profitQuotaMonitorText.text = $"CURRENT SCORE:\n  ${GetScore().ToString()}";
+            if (seedHasBeenSet)
+            {
+                if (__instance.livingPlayers == 0)
+                    LoseScoreToWipe();
+                else
+                    AddScore(__instance.GetValueOfAllScrap(true, true));
 
-            TerminalPatch.ForceItemSales(TimeOfDay.Instance.daysUntilDeadline);
+                __instance.profitQuotaMonitorText.text = $"CURRENT SCORE:\n  ${GetScore().ToString()}";
+                TerminalPatch.ForceItemSales(TimeOfDay.Instance.daysUntilDeadline);
+            }
         }
 
         public static int NextSeed(int seed)
         {
-            return new System.Random(seed + 84936687).Next(1,100000000);
+            return new System.Random(Math.Abs(seed + 84936687)).Next(1, seedMax);
         }
     }
 }

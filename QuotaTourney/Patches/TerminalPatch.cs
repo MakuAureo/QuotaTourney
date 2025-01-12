@@ -10,13 +10,10 @@ namespace QuotaTourney.Patches
     {
         [HarmonyPatch("ParsePlayerSentence")]
         [HarmonyPrefix]
-        static void ParsePlayerSentencePrePatch(Terminal __instance)
+        static void ParsePlayerSentencePrePatch(ref Terminal __instance)
         {
-            if (TimeOfDay.Instance.daysUntilDeadline < 3 || !StartOfRound.Instance.inShipPhase)
-                return;
-
             string str = __instance.screenText.text.Substring(__instance.screenText.text.Length - __instance.textAdded);
-            
+
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             foreach (char c in str)
             {
@@ -25,36 +22,23 @@ namespace QuotaTourney.Patches
             }
             str = sb.ToString().ToLower();
 
-            string[] inp = str.Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
-            if (inp[0] == "seed" && int.TryParse(inp[1], out int overrideSeed))
-            {
-                if (overrideSeed > 0 && overrideSeed < 100000000)
-                {
-                    SetSeed(overrideSeed);
-                }
-            }
-
-            if (inp[0] == "freq")
-            {
-                if (inp[1] != "day" && inp[1] != "quota")
-                    return;
-
-                SetMoonFrequency(inp[1]);
-            }
+            terminalInput = str;
         }
 
         [HarmonyPatch("LoadNewNodeIfAffordable")]
         [HarmonyPostfix]
         static void LoadNewNodeIfAffordablePostPatch(ref Terminal __instance)
         {
-            BuyFromShop("Item");
+            if (seedHasBeenSet)
+                BuyFromShop("Item");
         }
 
         [HarmonyPatch("BuyVehicleClientRpc")]
         [HarmonyPostfix]
         static void BuyVehicleClientRpcPostPatch(ref Terminal __instance)
         {
-            BuyFromShop("Cruiser");
+            if (seedHasBeenSet)
+                BuyFromShop("Cruiser");
         }
 
         public static void ForceItemSales(int force)
