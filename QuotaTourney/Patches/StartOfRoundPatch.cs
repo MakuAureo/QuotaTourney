@@ -53,10 +53,15 @@ namespace QuotaTourney.Patches
         {
             if (seedHasBeenSet)
             {
-                if (__instance.livingPlayers == 0)
-                    LoseScoreToWipe();
-                else
-                    AddScore(__instance.GetValueOfAllScrap(true, true));
+                if (StartOfRound.Instance.IsHost)
+                {
+                    if (__instance.livingPlayers == 0)
+                        LoseScoreToWipe();
+                    else
+                        AddScore(__instance.GetValueOfAllScrap(true, true));
+
+                    SyncScore();
+                }
 
                 __instance.overrideSeedNumber = NextSeed(__instance.overrideSeedNumber);
                 __instance.randomMapSeed = NextSeed(__instance.randomMapSeed);

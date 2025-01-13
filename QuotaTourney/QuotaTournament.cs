@@ -82,7 +82,6 @@ namespace QuotaTournament
 
         internal ManualLogSource internalLogger;
 
-        private static int score = 0;
         private static List<int> allowedMoons = new List<int>();
 
         public const int seedMax = 2147483647;
@@ -94,6 +93,7 @@ namespace QuotaTournament
         private static ConfigEntry<int> wipeLossPercentage;
 
         private static ModNetworkBehavior<int> netSeed;
+        private static ModNetworkBehavior<int> netScore;
         private static ModNetworkBehavior<string> netBuy;
         private static ModNetworkBehavior<string> netMoonFrequency;
         private static ModNetworkBehavior<string> netAllowedMoons;
@@ -163,6 +163,7 @@ namespace QuotaTournament
             try
             {
                 netSeed = new ModNetworkBehavior<int>("netSeed", SetSeedClientRequest, SetSeedServerRequest);
+                netScore = new ModNetworkBehavior<int>("netScore", SyncScoreClientRequest, SyncScoreServerRequest);
                 netBuy = new ModNetworkBehavior<string>("netBuy", BuyFromShopClientRequest, BuyFromShopServerRequest);
                 netMoonFrequency = new ModNetworkBehavior<string>("netMoonFrequency", SetMoonFrequencyClientRequest, SetMoonFrequencyServerRequest);
                 netMoonFrequency.SetValue("day");
@@ -237,22 +238,38 @@ namespace QuotaTournament
         public static void AddScore(int inputScore)
         {
             float multiplier = (speedrunBonus.Value) ? (2 - TimeOfDay.Instance.normalizedTimeOfDay) : (1);
-            score += (int)(inputScore*multiplier);
+            netScore.SetValue(netScore.GetValue() + (int)(inputScore*multiplier));
         }
 
         public static void LoseScoreToWipe()
         {
-            score = (int)((float)score*(100-wipeLossPercentage.Value)/100f);
+            netScore.SetValue((int)((float)netScore.GetValue()*(100-wipeLossPercentage.Value)/100f));
         }
 
         public static void ResetScore()
         {
-            score = 0;
+            netScore.SetValue(0);
         }
 
         public static int GetScore()
         {
-            return score;
+            return netScore.GetValue();
+        }
+
+        public static void SyncScore()
+        {
+            netScore.SendServer(0);
+        }
+        
+        public static void SyncScoreClientRequest(int option, ulong clientID)
+        {
+            if (option == 0)
+                netScore.SendClients(netScore.GetValue());
+        }
+
+        public static void SyncScoreServerRequest(int serverScore)
+        {
+            netScore.SetValue(serverScore);
         }
 
         public static string SetMoonFrequency()
