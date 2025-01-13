@@ -75,7 +75,7 @@ namespace QuotaTournament
     {
         private const string modGuid = "OreoM.QuotaTournament";
         private const string modName = "QuotaTournament";
-        private const string modVersion = "1.4.2";
+        private const string modVersion = "1.4.3";
 
         private readonly Harmony harmony = new Harmony(modGuid);
         private static QuotaTournament Instance;
