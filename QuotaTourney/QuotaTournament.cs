@@ -75,7 +75,7 @@ namespace QuotaTournament
     {
         private const string modGuid = "OreoM.QuotaTournament";
         private const string modName = "QuotaTournament";
-        private const string modVersion = "1.4.1";
+        private const string modVersion = "1.4.2";
 
         private readonly Harmony harmony = new Harmony(modGuid);
         private static QuotaTournament Instance;
@@ -167,7 +167,7 @@ namespace QuotaTournament
                 netMoonFrequency = new ModNetworkBehavior<string>("netMoonFrequency", SetMoonFrequencyClientRequest, SetMoonFrequencyServerRequest);
                 netMoonFrequency.SetValue("day");
                 netAllowedMoons = new ModNetworkBehavior<string>("netAllowedMoons", BanMoonClientRequest, BanMoonServerRequest);
-                netMoonFrequency.SetValue("default");
+                netAllowedMoons.SetValue("default");
 
                 ResetAllowedMoonList();
 

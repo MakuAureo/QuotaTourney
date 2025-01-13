@@ -24,16 +24,16 @@ namespace QuotaTourney.Patches
                     ResetScore();
                     ResetAllowedMoonList();
 
-                    if (QuotaTournament.QuotaTournament.GetMoonFrequencyValue() == "quota")
+                    if (GetMoonFrequencyValue().Equals("quota"))
                         __instance.ChangeLevelServerRpc(GetAllowedMoonList()[__instance.overrideSeedNumber % GetAllowedMoonList().Count],
                             Object.FindObjectOfType<Terminal>().groupCredits);
                 }
 
-                if (QuotaTournament.QuotaTournament.GetMoonFrequencyValue() == "day")
+                if (GetMoonFrequencyValue().Equals("day"))
                     __instance.ChangeLevelServerRpc(GetAllowedMoonList()[__instance.overrideSeedNumber % GetAllowedMoonList().Count],
                         Object.FindObjectOfType<Terminal>().groupCredits);
 
-                Debug.Log($"Next seed: {__instance.overrideSeedNumber}");
+                Debug.Log($"Next seed: {__instance.overrideSeedNumber}\n{GetMoonFrequencyValue()}");
             }
         }
 
@@ -53,6 +53,11 @@ namespace QuotaTourney.Patches
         {
             if (seedHasBeenSet)
             {
+                if (__instance.livingPlayers == 0)
+                    LoseScoreToWipe();
+                else
+                    AddScore(__instance.GetValueOfAllScrap(true, true));
+
                 __instance.overrideSeedNumber = NextSeed(__instance.overrideSeedNumber);
                 __instance.randomMapSeed = NextSeed(__instance.randomMapSeed);
                 __instance.isChallengeFile = false;
@@ -73,11 +78,6 @@ namespace QuotaTourney.Patches
         {
             if (seedHasBeenSet)
             {
-                if (__instance.livingPlayers == 0)
-                    LoseScoreToWipe();
-                else
-                    AddScore(__instance.GetValueOfAllScrap(true, true));
-
                 __instance.profitQuotaMonitorText.text = $"CURRENT SCORE:\n  ${GetScore().ToString()}";
                 TerminalPatch.ForceItemSales(TimeOfDay.Instance.daysUntilDeadline);
             }
