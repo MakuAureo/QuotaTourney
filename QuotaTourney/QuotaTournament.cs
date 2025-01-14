@@ -75,7 +75,7 @@ namespace QuotaTournament
     {
         private const string modGuid = "OreoM.QuotaTournament";
         private const string modName = "QuotaTournament";
-        private const string modVersion = "1.4.3";
+        private const string modVersion = "1.4.4";
 
         private readonly Harmony harmony = new Harmony(modGuid);
         private static QuotaTournament Instance;
@@ -275,15 +275,15 @@ namespace QuotaTournament
         public static string SetMoonFrequency()
         {
             if (TimeOfDay.Instance.daysUntilDeadline < 3 || !StartOfRound.Instance.inShipPhase)
-                return "Moon frequency can only be changed before starting the quota";
+                return "Moon frequency can only be changed before starting the quota\n\n";
 
             string[] inp = terminalInput.Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
             string config = inp[1];
             if (config != "quota" && config != "day")
-                return $"{config} is an invalid option";
+                return $"{config} is an invalid option\n\n";
 
             netMoonFrequency.SendServer(config);
-            return $"Moon will change every {config}";
+            return $"Moon will change every {config}\n\n";
         }
 
         public static void SetMoonFrequencyClientRequest(string config, ulong clientID)
@@ -304,14 +304,14 @@ namespace QuotaTournament
         public static string SetSeed()
         {
             if (TimeOfDay.Instance.daysUntilDeadline < 3 || !StartOfRound.Instance.inShipPhase)
-                return "Seed can only be set before starting the quota";
+                return "Seed can only be set before starting the quota\n\n";
 
             string[] inp = terminalInput.Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
             if (!int.TryParse(inp[1], out int seed))
-                return $"{seed} is not a valid number";
+                return $"{seed} is not a valid number\n\n";
 
             netSeed.SendServer(seed);
-            return $"Seed {seed} is set";
+            return $"Seed {seed} is set\n\n";
         }
 
         public static void SetSeedClientRequest(int seed, ulong clientID)
@@ -407,7 +407,7 @@ namespace QuotaTournament
         public static string BanMoon()
         {
             if (seedHasBeenSet)
-                return "Moons can only be banned before setting the seed";
+                return "Moons can only be banned before setting the seed\n\n";
 
             string[] inp = terminalInput.Split(new char[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
             string moon = inp[1];
@@ -416,10 +416,10 @@ namespace QuotaTournament
             if (moonName != null && allowedMoons.Contains((int)Enum.Parse(typeof(MoonIDs), moonName)))
             {
                 netAllowedMoons.SendServer(moonName);
-                return $"{moonName} has been banned from the list";
+                return $"{moonName} has been banned from the list\n\n";
             }
 
-            return $"{moon} is an invalid option";
+            return $"{moon} is an invalid option\n\n";
         }
 
         public static void BanMoonClientRequest(string moonName, ulong clientID)
